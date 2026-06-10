@@ -289,15 +289,14 @@ function publishCmd(deviceId, topic, payload, cmdDesc){
 
 // ── 매크로 편집/실행 모달 ─────────────────────────────────────────
 let _macros = {};   // deviceId → [{name,len}]
-const MACRO_EXAMPLE = `# 예시: CH13을 3번 깜빡임
-loop 3
-on 13
-delayms 500
-off 13
-delayms 500
+const MACRO_EXAMPLE = `# 가변저항(A0)으로 12V팬(D3) 속도 제어
+loop 20
+aread a a0
+pwmvar 3 a
+delaysec 1
 endloop
-lcd 0 macro done
-print finished`;
+pwm 3 0
+lcd 0 fan stopped`;
 
 function openMacroModal(deviceId){
   let div = document.getElementById('macro-modal');
@@ -319,7 +318,10 @@ function openMacroModal(deviceId){
       <p style="font-size:11px;color:#64748b;margin-bottom:4px;">매크로 본문 (한 줄에 한 명령)</p>
       <textarea id="macro-body" spellcheck="false" style="width:100%;height:200px;font-family:monospace;font-size:12px;padding:10px;border:1px solid #e2e8f0;border-radius:10px;resize:vertical;">${MACRO_EXAMPLE}</textarea>
       <p style="font-size:10px;color:#94a3b8;margin:6px 0 12px;line-height:1.6;">
-        명령: on/off/toggle &lt;ch&gt; · delayms/delaysec &lt;n&gt; · waituntil &lt;h&gt; &lt;m&gt; · lcd &lt;row&gt; &lt;text&gt; · lcdclear · print &lt;text&gt; · pub &lt;topic&gt; &lt;msg&gt; · loop &lt;n&gt; / endloop · end
+        제어: on/off/toggle &lt;ch&gt; · pwm &lt;핀&gt; &lt;0~255&gt; · pwmvar &lt;핀&gt; &lt;변수&gt;<br>
+        입력: aread &lt;변수a~h&gt; &lt;핀/A0~A5&gt; · set &lt;변수&gt; &lt;값&gt; · map &lt;변수&gt; &lt;inLo inHi outLo outHi&gt;<br>
+        시간: delayms/delaysec &lt;n&gt; · waituntil &lt;h&gt; &lt;m&gt;<br>
+        기타: lcd &lt;row&gt; &lt;text&gt; · lcdclear · print &lt;text&gt; · pub &lt;topic&gt; &lt;msg&gt; · loop &lt;n&gt;/endloop · end
       </p>
       <p id="macro-msg" style="font-size:12px;font-weight:700;min-height:18px;margin-bottom:10px;"></p>
       <div style="display:flex;gap:8px;">

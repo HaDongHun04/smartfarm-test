@@ -10,8 +10,13 @@ export const OP = {
   ON: 0x01, OFF: 0x02, TOGGLE: 0x03,
   DELAYMS: 0x04, DELAYSEC: 0x05, WAITUNTIL: 0x06,
   LCD: 0x07, LCDCLEAR: 0x08, PRINT: 0x09, PUB: 0x0A,
-  LOOP: 0x0B, ENDLOOP: 0x0C, END: 0xFF,
+  LOOP: 0x0B, ENDLOOP: 0x0C,
+  PWM: 0x0D, AREAD: 0x0E, PWMVAR: 0x0F, SET: 0x10, MAP: 0x11,
+  END: 0xFF,
 };
+
+// 변수 이름 a~h → 0~7
+function varIdx(s){ const c = String(s).trim().toLowerCase(); if(c.length===1 && c>='a' && c<='h') return c.charCodeAt(0)-97; return -1; }
 
 export const MACRO_POOL_SIZE = 2048;  // R4와 동일
 const MAX_CH = 28;
@@ -95,6 +100,52 @@ export function compileMacro(src, maxCh = MAX_CH) {
         emit(OP.ENDLOOP);
         break;
       }
+      case 'pwm': {
+        const p = arg.split(/\s+/);
+        const pin = parseInt(p[0],10), duty = parseInt(p[1],10);
+        if (!(pin>=0 && pin<=127)) return fail('pwm <핀> <0~255>');
+        if (!(duty>=0 && duty<=255)) return fail('duty 0~255');
+        emit(OP.PWM); emit(pin); emit(duty);
+        break;
+      }
+      case 'aread': {
+        const p = arg.split(/\s+/);
+        const vi = varIdx(p[0]);
+        // 핀: A0~A5를 "a0".."a5" 또는 숫자로 허용
+        let pin;
+        if (/^a[0-5]$/i.test(p[1]||'')) pin = 14 + parseInt(p[1].slice(1),10); // A0=14
+        else pin = parseInt(p[1],10);
+        if (vi<0) return fail('aread <변수a~h> <핀>');
+        if (!(pin>=0 && pin<=127)) return fail('핀 번호 오류 (A0~A5 또는 숫자)');
+        emit(OP.AREAD); emit(vi); emit(pin);
+        break;
+      }
+      case 'pwmvar': {
+        const p = arg.split(/\s+/);
+        const pin = parseInt(p[0],10), vi = varIdx(p[1]);
+        if (!(pin>=0 && pin<=127)) return fail('pwmvar <핀> <변수a~h>');
+        if (vi<0) return fail('변수는 a~h');
+        emit(OP.PWMVAR); emit(pin); emit(vi);
+        break;
+      }
+      case 'set': {
+        const p = arg.split(/\s+/);
+        const vi = varIdx(p[0]); const val = parseInt(p[1],10);
+        if (vi<0) return fail('set <변수a~h> <값>');
+        if (!Number.isInteger(val) || val<-32768 || val>32767) return fail('값 -32768~32767');
+        emit(OP.SET); emit(vi); emit(val & 0xFF); emit((val>>8) & 0xFF);
+        break;
+      }
+      case 'map': {
+        const p = arg.split(/\s+/);
+        const vi = varIdx(p[0]);
+        if (vi<0) return fail('map <변수> <inLo> <inHi> <outLo> <outHi>');
+        const nums = p.slice(1,5).map(x=>parseInt(x,10));
+        if (nums.length<4 || nums.some(x=>!Number.isInteger(x))) return fail('map 인자 4개 필요');
+        emit(OP.MAP); emit(vi);
+        for (const v of nums){ emit(v & 0xFF); emit((v>>8) & 0xFF); }
+        break;
+      }
       case 'end': li = lines.length; break;  // 종료
       default: return fail(`알 수 없는 명령 '${cmd}'`);
     }
@@ -128,6 +179,11 @@ export function disassemble(hex) {
     else if (op === OP.PUB) { const tl = b[i++]; const t = str(tl); const pl = b[i++]; const p = str(pl); lines.push(`pub ${t} ${p}`); }
     else if (op === OP.LOOP) lines.push(`loop ${b[i++]}`);
     else if (op === OP.ENDLOOP) lines.push('endloop');
+    else if (op === OP.PWM) { const pin=b[i++], d=b[i++]; lines.push(`pwm ${pin} ${d}`); }
+    else if (op === OP.AREAD) { const v=b[i++], pin=b[i++]; lines.push(`aread ${String.fromCharCode(97+v)} ${pin}`); }
+    else if (op === OP.PWMVAR) { const pin=b[i++], v=b[i++]; lines.push(`pwmvar ${pin} ${String.fromCharCode(97+v)}`); }
+    else if (op === OP.SET) { const v=b[i++]; const val=(b[i]|(b[i+1]<<8))<<16>>16; i+=2; lines.push(`set ${String.fromCharCode(97+v)} ${val}`); }
+    else if (op === OP.MAP) { const v=b[i++]; const n=[]; for(let k=0;k<4;k++){ n.push((b[i]|(b[i+1]<<8))<<16>>16); i+=2; } lines.push(`map ${String.fromCharCode(97+v)} ${n.join(' ')}`); }
     else if (op === OP.END) break;
     else { lines.push(`# unknown 0x${op.toString(16)}`); break; }
   }
