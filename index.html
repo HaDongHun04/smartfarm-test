@@ -345,6 +345,7 @@ function renderMacroList(deviceId){
     return `
     <div style="width:100%;display:flex;align-items:center;gap:6px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:6px 8px;margin-bottom:4px;">
       <button onclick="runMacro('${deviceId}','${mac.name}')" style="border:none;background:#eef2ff;color:#4f46e5;font-size:12px;font-weight:700;cursor:pointer;border-radius:8px;padding:4px 10px;">▶ ${mac.name}</button>
+      <button onclick="loadMacro('${deviceId}','${mac.name}')" style="border:none;background:#f0fdf4;color:#16a34a;font-size:11px;cursor:pointer;border-radius:6px;padding:4px 8px;">✎ 불러오기</button>
       <span style="font-size:10px;color:#94a3b8;flex:1;">${mac.len}B · ${trigLabel}</span>
       <input id="bind-${deviceId}-${mac.name}" type="number" min="2" max="13" placeholder="핀" value="${trig!==null?trig:''}"
         style="width:48px;font-size:11px;padding:3px 4px;border:1px solid #e2e8f0;border-radius:6px;">
@@ -363,6 +364,13 @@ function bindMacro(deviceId,name){
 }
 function unbindMacro(deviceId,name){
   client?.publish(`hdh/${deviceId}/macro/bind`, `${name}\n255`, {qos:1});
+}
+// 저장된 매크로를 R4에서 불러와 편집창에 채움 (바이트코드 → 역어셈블)
+function loadMacro(deviceId,name){
+  const msg = document.getElementById('macro-msg');
+  if(msg){ msg.textContent=`'${name}' 불러오는 중…`; msg.style.color='#16a34a'; }
+  window._macroLoadName = name;
+  client?.publish(`hdh/${deviceId}/get/macro/code`, name, {qos:1});
 }
 
 function reqMacroList(deviceId){
@@ -559,6 +567,7 @@ function connectMQTT(){
     client.subscribe('hdh/+/auth/ok',    {qos:1});
     client.subscribe('hdh/+/macro/list',  {qos:1});
     client.subscribe('hdh/+/macro/error', {qos:1});
+    client.subscribe('hdh/+/macro/code',  {qos:1});
 
     // 3초 내 registry 미수신 시
     // ★ applyRegistry([]) 호출 금지 — registry 변수를 비우면
@@ -633,6 +642,31 @@ function onMessage(topic, buf){
       if(msg){ msg.textContent='❌ '+(data.msg||'컴파일 오류'); msg.style.color='#ef4444'; }
       log(`❌ 매크로 오류: ${data.msg}`,'le');
     }catch(e){}
+    return;
+  }
+  // ── 매크로 바이트코드 수신 → 역어셈블해 편집창에 채움 ──
+  if(topic.endsWith('/macro/code')){
+    const nl = payload.indexOf('\n');
+    if(nl < 0) return;
+    const name = payload.slice(0, nl).trim();
+    const hex = payload.slice(nl + 1).trim();
+    (async ()=>{
+      try{
+        const { disassemble } = await import('./compiler.js');
+        const text = disassemble(hex);
+        const nameInp = document.getElementById('macro-name');
+        const bodyInp = document.getElementById('macro-body');
+        if(nameInp && bodyInp){
+          nameInp.value = name;
+          bodyInp.value = text;
+          const msg = document.getElementById('macro-msg');
+          if(msg){ msg.textContent=`✅ '${name}' 불러옴 (수정 후 저장 가능)`; msg.style.color='#16a34a'; }
+        }
+      }catch(e){
+        const msg = document.getElementById('macro-msg');
+        if(msg){ msg.textContent='❌ compiler.js 로드 실패'; msg.style.color='#ef4444'; }
+      }
+    })();
     return;
   }
   if(topic === REGISTRY_TOPIC){
