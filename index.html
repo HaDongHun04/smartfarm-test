@@ -1,0 +1,1396 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Smart Farm Control</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
+<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+<style>
+  body{background:#f0f4f8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans KR',sans-serif;-webkit-tap-highlight-color:transparent;user-select:none;}
+  .card{background:#fff;border-radius:24px;padding:20px;box-shadow:0 1px 6px rgba(0,0,0,.07);}
+  .input-field{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;color:#1e293b;padding:11px 13px;width:100%;font-size:13px;outline:none;transition:border-color .2s;}
+  .input-field:focus{border-color:#3b82f6;background:#fff;}
+  .btn-primary{background:#3b82f6;color:#fff;border-radius:10px;font-weight:700;padding:13px;width:100%;font-size:14px;cursor:pointer;border:none;transition:background .2s;}
+  .btn-primary:hover{background:#2563eb;} .btn-primary:active{transform:scale(.98);}
+  .ch-btn{position:relative;display:flex;flex-direction:column;align-items:center;gap:8px;cursor:pointer;}
+  .ch-circle{width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;transition:all .2s;position:relative;box-shadow:0 2px 6px rgba(0,0,0,.1);z-index:1;}
+  .ch-circle.off{background:#e2e8f0;} .ch-circle.on{box-shadow:0 4px 14px rgba(0,0,0,.2);} .ch-circle:active{transform:scale(.92);}
+  .ch-gear{position:absolute;bottom:-5px;right:-5px;width:19px;height:19px;background:#fff;border:1.5px solid #e2e8f0;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:2;box-shadow:0 1px 3px rgba(0,0,0,.1);transition:all .15s;}
+  .ch-gear:hover{background:#3b82f6;border-color:#3b82f6;} .ch-gear:hover .gear-icon{color:#fff;}
+  .mode-tag{position:absolute;top:-9px;left:50%;transform:translateX(-50%);font-size:9px;font-weight:700;padding:2px 6px;border-radius:10px;white-space:nowrap;pointer-events:none;z-index:2;}
+  .mt-sch{background:#dbeafe;color:#1d4ed8;} .mt-cir{background:#d1fae5;color:#065f46;} .mt-inc{background:#ede9fe;color:#5b21b6;}
+  .badge{font-size:9px;font-weight:700;padding:2px 8px;border-radius:20px;}
+  .badge-on{background:#dcfce7;color:#15803d;} .badge-off{background:#f1f5f9;color:#94a3b8;} .badge-chk{background:#f1f5f9;color:#94a3b8;}
+  .spin{animation:spin 1s linear infinite;} @keyframes spin{to{transform:rotate(360deg);}}
+  .modal-bg{position:fixed;inset:0;background:rgba(15,23,42,.4);backdrop-filter:blur(3px);z-index:50;display:flex;align-items:flex-end;justify-content:center;}
+  .modal-sheet{position:relative;background:#fff;border-radius:24px 24px 0 0;width:100%;max-width:480px;max-height:88vh;overflow-y:auto;padding:20px 18px 40px;transition:transform .25s ease;}
+  .modal-handle{width:44px;height:5px;background:#e2e8f0;border-radius:3px;margin:0 auto 18px;cursor:pointer;transition:background .2s;}
+  .modal-handle:hover,.modal-handle:active{background:#94a3b8;}
+  .modal-close-btn{position:absolute;top:14px;right:16px;width:28px;height:28px;border-radius:50%;background:#f1f5f9;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;color:#94a3b8;line-height:1;transition:all .15s;}
+  .modal-close-btn:hover{background:#e2e8f0;color:#475569;}
+  .pin-row{display:flex;gap:8px;justify-content:center;margin:10px 0 6px;}
+  .pin-digit{width:44px;height:52px;border:2px solid #e2e8f0;border-radius:12px;text-align:center;font-size:22px;font-weight:700;color:#1e293b;background:#f8fafc;outline:none;transition:border-color .15s;-webkit-text-security:disc;}
+  .pin-digit:focus{border-color:#3b82f6;background:#fff;}
+  .pin-digit.err{border-color:#ef4444;animation:shake .3s;}
+  @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+  .setting-row{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:12px;margin-bottom:8px;}
+  .input-sm{background:#fff;border:1px solid #e2e8f0;border-radius:8px;color:#1e293b;padding:7px 10px;font-size:12px;outline:none;width:100%;transition:border-color .15s;}
+  .input-sm:focus{border-color:#3b82f6;}
+  .btn-sm{border-radius:8px;font-weight:700;font-size:12px;padding:7px 14px;cursor:pointer;border:none;transition:background .15s;}
+  .btn-add{background:#3b82f6;color:#fff;} .btn-add:hover{background:#2563eb;}
+  .btn-del{background:#fee2e2;color:#dc2626;} .btn-del:hover{background:#fecaca;}
+  .btn-gray{background:#f1f5f9;color:#475569;} .btn-gray:hover{background:#e2e8f0;}
+  .mode-tab{padding:7px 13px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;border:1px solid #e2e8f0;color:#94a3b8;background:#fff;transition:all .15s;}
+  .mode-tab.active{background:#3b82f6;color:#fff;border-color:#3b82f6;}
+  .device-offline{opacity:.55;filter:grayscale(.5);pointer-events:none;}
+  #debug-log{font-family:Menlo,monospace;font-size:10px;color:#4b5563;height:96px;overflow-y:auto;line-height:1.7;}
+  .ls{color:#2563eb;} .lr{color:#059669;} .le{color:#dc2626;} .lx{color:#94a3b8;}
+  /* 기기 레지스트리 모달 */
+  .reg-row{display:flex;align-items:center;gap:8px;padding:10px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;margin-bottom:6px;}
+  .reg-row.editing{border-color:#3b82f6;background:#eff6ff;}
+</style>
+</head>
+<body class="min-h-screen flex flex-col items-center py-6 px-4">
+
+<!-- 로그인 -->
+<div id="login-view" class="w-full max-w-sm">
+  <div class="card">
+    <div class="text-center mb-6">
+      <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-blue-50 mb-3">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3l7 7-7 7M12 3l7 7-7 7"/></svg>
+      </div>
+      <h1 class="text-xl font-extrabold tracking-tight text-slate-800">Smart Farm</h1>
+      <p class="text-xs text-slate-400 mt-1">관리자 계정으로 접속하세요</p>
+    </div>
+    <div class="space-y-3">
+      <div><label class="text-[10px] font-bold text-slate-400 mb-1 block">WebSocket URL</label>
+           <input id="mqtt-url" class="input-field" value="wss://2cda7be527f245e1bfdd99c16a70d52d.s1.eu.hivemq.cloud:8884/mqtt"></div>
+      <div><label class="text-[10px] font-bold text-slate-400 mb-1 block">Username</label>
+           <input id="mqtt-username" class="input-field" placeholder="Username"></div>
+      <div><label class="text-[10px] font-bold text-slate-400 mb-1 block">Password</label>
+           <input id="mqtt-password" class="input-field" type="password" placeholder="Password"></div>
+      <p id="login-error" class="text-red-500 text-xs font-bold hidden"></p>
+      <button onclick="connectMQTT()" class="btn-primary flex items-center justify-center gap-2 mt-2">
+        <span id="btn-login-text">통합 관제 연결</span>
+        <svg id="btn-spinner" class="w-4 h-4 spin hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- 대시보드 -->
+<div id="dashboard-view" class="w-full max-w-sm hidden flex-col gap-4">
+  <div class="flex items-center justify-between px-1">
+    <div>
+      <h1 class="text-lg font-extrabold tracking-tight text-slate-800">통합 관제 패널</h1>
+      <p id="conn-status" class="text-[11px] text-blue-500 font-bold mt-0.5">● 서버 접속됨</p>
+    </div>
+    <div class="flex gap-2">
+      <!-- 기기 관리 버튼 -->
+      <button onclick="openRegistryModal()" title="기기 목록 관리"
+              class="w-9 h-9 rounded-full bg-white shadow-sm flex items-center justify-center text-slate-400 hover:text-purple-500 transition-colors">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/></svg>
+      </button>
+      <button onclick="requestAllStates()" title="전체 동기화"
+              class="w-9 h-9 rounded-full bg-white shadow-sm flex items-center justify-center text-slate-400 hover:text-blue-500 transition-colors">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h5M20 20v-5h-5M4 9a9 9 0 0114.13-1.13M20 15A9 9 0 015.87 16.13"/></svg>
+      </button>
+      <button onclick="disconnectMQTT()" title="로그아웃"
+              class="w-9 h-9 rounded-full bg-white shadow-sm flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h6a2 2 0 012 2v1"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- 레지스트리 로딩 중 표시 -->
+  <div id="registry-loading" class="card text-center py-6 hidden">
+    <div class="inline-flex items-center gap-2 text-slate-400 text-sm">
+      <svg class="w-4 h-4 spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
+      기기 목록 로딩 중...
+    </div>
+    <p class="text-[10px] text-slate-400 mt-2">hdh/registry retain 메시지 수신 대기</p>
+  </div>
+
+  <div id="device-cards"></div>
+
+  <!-- 디버그 로그 -->
+  <div class="card">
+    <div class="flex justify-between items-center mb-2">
+      <span class="text-[10px] font-bold text-slate-400">실시간 통신 로그</span>
+      <button onclick="document.getElementById('debug-log').innerHTML=''" class="text-[10px] text-slate-400 hover:text-slate-600">지우기</button>
+    </div>
+    <div id="debug-log">대기 중...<br></div>
+  </div>
+</div>
+
+<!-- 채널 설정 모달 -->
+<div id="cfg-modal" class="modal-bg hidden" onmousedown="if(event.target===this) this.dataset.md=1; else this.dataset.md=0;" onmouseup="if(event.target===this && this.dataset.md==='1') closeModal(); this.dataset.md=0;">
+  <div class="modal-sheet" id="cfg-sheet">
+    <div class="modal-handle" onclick="closeModal()" title="닫기"></div>
+    <button class="modal-close-btn" onclick="closeModal()">✕</button>
+    <div id="modal-content"></div>
+  </div>
+</div>
+
+<!-- 기기 레지스트리 모달 -->
+<div id="registry-modal" class="modal-bg hidden" onmousedown="if(event.target===this) this.dataset.md=1; else this.dataset.md=0;" onmouseup="if(event.target===this && this.dataset.md==='1') closeRegistryModal(); this.dataset.md=0;">
+  <div class="modal-sheet" id="registry-sheet">
+    <div class="modal-handle" onclick="closeRegistryModal()" title="닫기"></div>
+    <button class="modal-close-btn" onclick="closeRegistryModal()">✕</button>
+    <div id="registry-modal-content"></div>
+  </div>
+</div>
+
+<script>
+// ── 모달 스와이프 닫기 ─────────────────────────────────────────────
+(function(){
+  let startY = 0, dragging = false;
+  function initSwipe(sheetId, closeFn) {
+    const sheet = document.getElementById(sheetId);
+    if (!sheet) return;
+    sheet.addEventListener('touchstart', e => {
+      if (sheet.scrollTop > 0) return;  // 스크롤 중엔 스와이프 무시
+      startY = e.touches[0].clientY; dragging = true;
+    }, {passive: true});
+    sheet.addEventListener('touchmove', e => {
+      if (!dragging) return;
+      const dy = e.touches[0].clientY - startY;
+      if (dy > 0) sheet.style.transform = `translateY(${dy}px)`;
+    }, {passive: true});
+    sheet.addEventListener('touchend', e => {
+      if (!dragging) return;
+      const dy = e.changedTouches[0].clientY - startY;
+      sheet.style.transform = '';
+      if (dy > 80) closeFn();
+      dragging = false;
+    });
+  }
+  // DOMContentLoaded 후 초기화
+  document.addEventListener('DOMContentLoaded', () => {
+    initSwipe('cfg-sheet',      () => closeModal());
+    initSwipe('registry-sheet', () => closeRegistryModal());
+  });
+})();
+
+// ════════════════════════════════════════════
+//  PIN 시스템 — 아두이노에서 검증 (기기마다 다른 PIN 지원)
+//  웹은 PIN을 payload 앞에 붙여서 MQTT로 전송, 아두이노가 검증
+//  보호 명령: cfg/ch/n/name, cfg/ch/n/pin, ch/n/clear,
+//             cfg/id, cfg/wifi, cfg/reset, cfg/setpin
+// ════════════════════════════════════════════
+let _pinCallback = null;   // PIN 입력 후 실행할 함수(pin 문자열 받음)
+
+// PIN 입력 팝업: 사용자가 OK 누르면 cb(pin4) 호출
+function promptPin(cb, title='설정 보안') {
+  _pinCallback = cb;
+  if (document.getElementById('pin-modal')) { focusPinDigit(0); return; }
+  const div = document.createElement('div');
+  div.id = 'pin-modal';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:100;display:flex;align-items:center;justify-content:center;';
+  div.innerHTML = `
+    <div style="background:#fff;border-radius:24px;padding:28px 24px 24px;width:min(320px,90vw);text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.25);">
+      <p style="font-weight:800;font-size:16px;color:#0f172a;margin-bottom:4px;">🔒 ${title}</p>
+      <p style="font-size:12px;color:#94a3b8;margin-bottom:20px;">기기 PIN 4자리를 입력하세요</p>
+      <div class="pin-row" id="pin-row">
+        ${[0,1,2,3].map(i=>`<input class="pin-digit" id="pd${i}" maxlength="1" type="tel" inputmode="numeric"
+          oninput="onPinDigit(${i},this)" onkeydown="onPinKey(${i},event)">`).join('')}
+      </div>
+      <p id="pin-err" style="color:#ef4444;font-size:12px;font-weight:700;min-height:18px;margin:6px 0 16px;"></p>
+      <div style="display:flex;gap:8px;">
+        <button onclick="closePinModal()" style="flex:1;padding:12px;border-radius:10px;border:1px solid #e2e8f0;background:#f8fafc;font-size:13px;font-weight:700;color:#64748b;cursor:pointer;">취소</button>
+        <button onclick="submitPin()" style="flex:1;padding:12px;border-radius:10px;border:none;background:#3b82f6;color:#fff;font-size:13px;font-weight:700;cursor:pointer;">확인 →</button>
+      </div>
+      <p style="font-size:10px;color:#94a3b8;margin-top:12px;">PIN은 아두이노에서 검증됩니다</p>
+    </div>`;
+  document.body.appendChild(div);
+  focusPinDigit(0);
+}
+
+function focusPinDigit(i) {
+  setTimeout(() => { const el = document.getElementById(`pd${i}`); if (el) el.focus(); }, 50);
+}
+function onPinDigit(i, el) {
+  el.value = el.value.replace(/\D/g, '').slice(-1);
+  document.getElementById('pin-err').textContent = '';
+  [...document.querySelectorAll('.pin-digit')].forEach(d => d.classList.remove('err'));
+  if (el.value && i < 3) focusPinDigit(i + 1);
+}
+function onPinKey(i, e) {
+  if (e.key === 'Backspace' && !document.getElementById(`pd${i}`).value && i > 0) focusPinDigit(i - 1);
+  if (e.key === 'Enter') submitPin();
+}
+function submitPin() {
+  const entered = [0,1,2,3].map(i => document.getElementById(`pd${i}`).value).join('');
+  if (entered.length < 4) { document.getElementById('pin-err').textContent = '4자리를 모두 입력하세요.'; return; }
+  closePinModal();
+  if (_pinCallback) { _pinCallback(entered); _pinCallback = null; }
+}
+function closePinModal() {
+  const el = document.getElementById('pin-modal');
+  if (el) el.remove();
+  _pinCallback = null;
+}
+// auth/error 수신 시 현재 모달에 에러 표시
+function showAuthError(msg) {
+  // 열려있는 설정 모달에 에러 메시지 삽입
+  const errDivId = 'auth-err-banner';
+  let el = document.getElementById(errDivId);
+  if (!el) {
+    el = document.createElement('p');
+    el.id = errDivId;
+    el.style.cssText = 'color:#ef4444;font-size:12px;font-weight:700;text-align:center;padding:8px;background:#fff5f5;border-radius:8px;margin-bottom:8px;';
+    const mc = document.getElementById('modal-content');
+    if (mc) mc.insertBefore(el, mc.firstChild);
+  }
+  el.textContent = '❌ ' + msg;
+  setTimeout(() => el?.remove(), 4000);
+}
+// ─────────────────────────────────────────────────────────────────
+//  형식: [{"id":"box01","label":"담액식"}, ...]
+// ════════════════════════════════════════════
+const REGISTRY_TOPIC = 'hdh/registry';
+
+// ════════════════════════════════════════════
+//  Audit — 사용자 조작 로그 (Firebase Realtime DB 전담)
+// ════════════════════════════════════════════
+// 아두이노는 제어만 담당. 로그 저장/조회는 Firebase가 처리.
+window._auditUser  = '';         // MQTT 로그인 시 설정
+window._auditIp    = 'unknown';  // 공인 IP (시작 시 1회 조회)
+window._auditAgent = 'unknown';  // 브라우저/기기 요약
+
+function _parseAgent(ua){
+  if(/iPhone/.test(ua)) return 'iPhone';
+  if(/iPad/.test(ua))   return 'iPad';
+  if(/Android/.test(ua)){const m=ua.match(/;\s*([^)]+)\)/);return m?m[1].trim().slice(0,18):'Android';}
+  if(/Windows NT 10/.test(ua)) return 'Win10';
+  if(/Windows/.test(ua))       return 'Windows';
+  if(/Macintosh/.test(ua))     return 'Mac';
+  return 'PC';
+}
+async function _initAudit(){
+  window._auditAgent = _parseAgent(navigator.userAgent);
+  try{
+    const r = await fetch('https://api.ipify.org?format=json');
+    window._auditIp = (await r.json()).ip;
+  }catch{ window._auditIp = 'unknown'; }
+}
+
+// ── 모든 MQTT 명령의 기본 전송 함수 ──────────────────────────────
+// 기존 client.publish() 대신 이 함수를 사용하면 Firebase에 자동 기록됨
+function publishCmd(deviceId, topic, payload, cmdDesc){
+  if(!client?.connected) return;
+  client.publish(topic, payload, {qos:1});
+  log(`📤 ${topic.split('/').slice(2).join('/')} → ${String(payload).slice(0,30)}`,'ls');
+  // Firebase 로그 기록 (Firebase 모듈이 로드된 경우에만)
+  window.fbLog?.(deviceId, cmdDesc || String(payload).slice(0, 50));
+}
+
+// ── 매크로 편집/실행 모달 ─────────────────────────────────────────
+let _macros = {};   // deviceId → [{name,len}]
+const MACRO_EXAMPLE = `# 예시: CH13을 3번 깜빡임
+loop 3
+on 13
+delayms 500
+off 13
+delayms 500
+endloop
+lcd 0 macro done
+print finished`;
+
+function openMacroModal(deviceId){
+  let div = document.getElementById('macro-modal');
+  if(div) div.remove();
+  div = document.createElement('div');
+  div.id = 'macro-modal';
+  div.className = 'modal-bg';
+  div.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:90;display:flex;align-items:center;justify-content:center;';
+  div.innerHTML = `
+    <div style="background:#fff;border-radius:20px;padding:22px;width:min(560px,94vw);max-height:88vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.25);">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <p style="font-weight:800;font-size:15px;color:#0f172a;">⚙️ 매크로 — ${deviceId}</p>
+        <button onclick="document.getElementById('macro-modal').remove()" style="border:none;background:#f1f5f9;border-radius:8px;width:28px;height:28px;cursor:pointer;font-size:16px;">×</button>
+      </div>
+      <p style="font-size:11px;color:#64748b;margin-bottom:6px;">저장된 매크로</p>
+      <div id="macro-list-${deviceId}" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;min-height:24px;"></div>
+      <p style="font-size:11px;color:#64748b;margin-bottom:4px;">매크로 이름 (15자 이내)</p>
+      <input id="macro-name" class="input-field text-sm" placeholder="예: blink13" style="margin-bottom:8px;">
+      <p style="font-size:11px;color:#64748b;margin-bottom:4px;">매크로 본문 (한 줄에 한 명령)</p>
+      <textarea id="macro-body" spellcheck="false" style="width:100%;height:200px;font-family:monospace;font-size:12px;padding:10px;border:1px solid #e2e8f0;border-radius:10px;resize:vertical;">${MACRO_EXAMPLE}</textarea>
+      <p style="font-size:10px;color:#94a3b8;margin:6px 0 12px;line-height:1.6;">
+        명령: on/off/toggle &lt;ch&gt; · delayms/delaysec &lt;n&gt; · waituntil &lt;h&gt; &lt;m&gt; · lcd &lt;row&gt; &lt;text&gt; · lcdclear · print &lt;text&gt; · pub &lt;topic&gt; &lt;msg&gt; · loop &lt;n&gt; / endloop · end
+      </p>
+      <p id="macro-msg" style="font-size:12px;font-weight:700;min-height:18px;margin-bottom:10px;"></p>
+      <div style="display:flex;gap:8px;">
+        <button onclick="saveMacro('${deviceId}')" class="btn-sm btn-add" style="flex:1;">💾 저장 (컴파일)</button>
+        <button onclick="reqMacroList('${deviceId}')" class="btn-sm" style="flex:0 0 auto;padding:0 14px;border:1px solid #e2e8f0;background:#f8fafc;color:#64748b;border-radius:10px;cursor:pointer;">새로고침</button>
+      </div>
+    </div>`;
+  document.body.appendChild(div);
+  reqMacroList(deviceId);
+  renderMacroList(deviceId);
+}
+
+function renderMacroList(deviceId){
+  const box = document.getElementById(`macro-list-${deviceId}`);
+  if(!box) return;
+  const list = _macros[deviceId] || [];
+  if(!list.length){ box.innerHTML = '<span style="font-size:11px;color:#94a3b8;">없음</span>'; return; }
+  box.innerHTML = list.map(mac=>{
+    const trig = (mac.trig!==undefined && mac.trig>=0) ? mac.trig : null;
+    const trigLabel = trig!==null ? `🔘 D${trig}` : '버튼 없음';
+    return `
+    <div style="width:100%;display:flex;align-items:center;gap:6px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:6px 8px;margin-bottom:4px;">
+      <button onclick="runMacro('${deviceId}','${mac.name}')" style="border:none;background:#eef2ff;color:#4f46e5;font-size:12px;font-weight:700;cursor:pointer;border-radius:8px;padding:4px 10px;">▶ ${mac.name}</button>
+      <span style="font-size:10px;color:#94a3b8;flex:1;">${mac.len}B · ${trigLabel}</span>
+      <input id="bind-${deviceId}-${mac.name}" type="number" min="2" max="13" placeholder="핀" value="${trig!==null?trig:''}"
+        style="width:48px;font-size:11px;padding:3px 4px;border:1px solid #e2e8f0;border-radius:6px;">
+      <button onclick="bindMacro('${deviceId}','${mac.name}')" style="border:none;background:#dbeafe;color:#2563eb;font-size:11px;cursor:pointer;border-radius:6px;padding:3px 8px;">할당</button>
+      <button onclick="unbindMacro('${deviceId}','${mac.name}')" style="border:none;background:#f1f5f9;color:#64748b;font-size:11px;cursor:pointer;border-radius:6px;padding:3px 6px;">해제</button>
+      <button onclick="delMacro('${deviceId}','${mac.name}')" style="border:none;background:none;color:#ef4444;font-size:14px;cursor:pointer;">×</button>
+    </div>`;
+  }).join('');
+}
+
+function bindMacro(deviceId,name){
+  const inp = document.getElementById(`bind-${deviceId}-${name}`);
+  const pin = parseInt(inp.value,10);
+  if(!(pin>=2 && pin<=13)){ alert('버튼 핀은 2~13 (I2C·시리얼 핀 제외)'); return; }
+  client?.publish(`hdh/${deviceId}/macro/bind`, `${name}\n${pin}`, {qos:1});
+}
+function unbindMacro(deviceId,name){
+  client?.publish(`hdh/${deviceId}/macro/bind`, `${name}\n255`, {qos:1});
+}
+
+function reqMacroList(deviceId){
+  client?.publish(`hdh/${deviceId}/get/macro`, 'GET', {qos:1});
+}
+async function saveMacro(deviceId){
+  const name = document.getElementById('macro-name').value.trim();
+  const body = document.getElementById('macro-body').value;
+  const msg = document.getElementById('macro-msg');
+  if(!name){ msg.textContent='이름을 입력하세요.'; msg.style.color='#ef4444'; return; }
+  if(name.length>15){ msg.textContent='이름은 15자 이내.'; msg.style.color='#ef4444'; return; }
+  // ★ 브라우저에서 컴파일 (compiler.js 동적 로드)
+  let compileMacro;
+  try {
+    ({ compileMacro } = await import('./compiler.js'));
+  } catch(e){
+    msg.textContent='❌ compiler.js 로드 실패 — 같은 폴더에 있는지 확인'; msg.style.color='#ef4444';
+    return;
+  }
+  const r = compileMacro(body, 28);
+  if(!r.ok){ msg.textContent='❌ '+r.error; msg.style.color='#ef4444'; return; }
+  // hex 바이트코드 전송 (name\nhex)
+  client?.publish(`hdh/${deviceId}/macro/save`, `${name}\n${r.hex}`, {qos:1});
+  msg.textContent=`컴파일 OK (${r.size}바이트) → 저장 중…`; msg.style.color='#2563eb';
+}
+function runMacro(deviceId,name){
+  publishCmd(deviceId, `hdh/${deviceId}/macro/run`, name, `매크로 실행 ${name}`);
+}
+function delMacro(deviceId,name){
+  if(!confirm(`매크로 '${name}' 삭제?`)) return;
+  client?.publish(`hdh/${deviceId}/macro/del`, name, {qos:1});
+}
+// 기기 카드 하단의 매크로 버튼들(빠른 실행) 렌더
+function renderMacroButtons(deviceId){
+  const box = document.getElementById(`macro-btns-${deviceId}`);
+  if(!box) return;
+  const list = _macros[deviceId] || [];
+  box.innerHTML = list.map(mac=>`
+    <button onclick="runMacro('${deviceId}','${mac.name}')"
+      style="padding:8px;border-radius:10px;border:1px solid #c7d2fe;background:#eef2ff;font-size:11px;font-weight:700;color:#4f46e5;cursor:pointer;">
+      ▶ ${mac.name}</button>`).join('');
+}
+
+// ── 조작 기록 모달 ────────────────────────────────────────────────
+async function showAuditLog(deviceId){
+  // 바텀시트 먼저 띄우고 로딩 표시
+  if(document.getElementById('audit-modal')) return;
+  const div = document.createElement('div');
+  div.id = 'audit-modal';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:100;display:flex;align-items:flex-end;justify-content:center;';
+  div.innerHTML = `
+    <div style="background:#fff;border-radius:24px 24px 0 0;width:100%;max-width:480px;max-height:82vh;display:flex;flex-direction:column;padding:20px 18px 36px;">
+      <div style="width:44px;height:5px;background:#e2e8f0;border-radius:3px;margin:0 auto 16px;cursor:pointer;" onclick="closeAuditModal()"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-shrink:0;">
+        <p style="font-weight:800;font-size:14px;color:#0f172a;">📋 조작 기록 — ${deviceId}</p>
+        <button onclick="closeAuditModal()" style="background:#f1f5f9;border:none;border-radius:50%;width:28px;height:28px;cursor:pointer;font-size:16px;color:#94a3b8;">✕</button>
+      </div>
+      <div id="audit-body" style="overflow-y:auto;flex:1;font-size:11px;color:#334155;">
+        <p style="text-align:center;padding:20px;color:#94a3b8;">⏳ Firebase에서 불러오는 중…</p>
+      </div>
+    </div>`;
+  // 드래그 닫힘 방지 (조작 기록 모달에도 적용)
+  div.onmousedown = e => { if(e.target===div) div.dataset.md=1; else div.dataset.md=0; };
+  div.onmouseup = e => { if(e.target===div && div.dataset.md==='1') closeAuditModal(); div.dataset.md=0; };
+  document.body.appendChild(div);
+
+  // Firebase에서 최근 50건 조회
+  const logs = await window.fbGetLogs?.(deviceId);
+  const body = document.getElementById('audit-body');
+  if(!body) return;
+
+  if(logs === null){
+    body.innerHTML = '<p style="text-align:center;padding:16px;color:#ef4444;">Firebase 연결 실패</p>';
+    return;
+  }
+  if(logs.length === 0){
+    body.innerHTML = '<p style="text-align:center;padding:16px;color:#94a3b8;">(기록 없음)</p>';
+    return;
+  }
+  body.innerHTML = logs.map(r=>`
+    <div style="padding:10px 0;border-bottom:1px solid #f1f5f9;">
+      <div style="display:flex;justify-content:space-between;margin-bottom:3px;">
+        <span style="font-weight:700;color:#0f172a;">${r.u||'?'}</span>
+        <span style="color:#94a3b8;">${r.t||''}</span>
+      </div>
+      <div style="color:#3b82f6;font-weight:600;">→ ${r.cmd||''}</div>
+      <div style="color:#94a3b8;font-size:10px;">${r.dv||''} · ${r.ip||''}</div>
+    </div>`).join('');
+}
+function closeAuditModal(){ document.getElementById('audit-modal')?.remove(); }
+// ─────────────────────────────────────────────────────────────────
+const COL = ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#06b6d4','#f43f5e'];
+
+// 동적 기기 목록 (레지스트리에서 로드)
+let registry = [];   // [{id, label}, ...]
+let state = {};      // {deviceId: {online, lastSeen, channels}}
+let client = null;
+let _registryReceived = false;
+let _registryTimeout = null;
+
+function log(msg,cls='lx'){const el=document.getElementById('debug-log');const t=new Date().toLocaleTimeString('ko',{hour12:false});el.innerHTML+=`<span class="${cls}">[${t}] ${msg}</span><br>`;el.scrollTop=el.scrollHeight;}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function pad2(n){return String(n).padStart(2,'0');}
+function hm(h,m){return`${pad2(h)}:${pad2(m)}`;}
+function secLabel(s){const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),r=s%60;return h>0?`${h}시간 ${m}분`:m>0?`${m}분 ${r}초`:`${r}초`;}
+function chHex(n){return COL[(n-1)%COL.length];}
+function deviceIds(){return registry.map(r=>r.id);}
+function deviceLabel(id){return (registry.find(r=>r.id===id)||{}).label||id;}
+
+// ── 레지스트리 저장 (retain) ──
+function saveRegistry(){
+  if(!client?.connected) return;
+  // ★ 안전장치: 빈 배열을 retain으로 덮어쓰면 모든 기기 목록이 사라짐
+  // → registry가 실제로 비어있더라도 최소 1개 이상일 때만 저장
+  if(registry.length === 0) {
+    log('⚠️ registry가 비어있어 저장 건너뜀 (기기 목록 보호)', 'lx');
+    return;
+  }
+  const payload = JSON.stringify(registry);
+  client.publish(REGISTRY_TOPIC, payload, {qos:1, retain:true});
+  log(`📤 registry 저장 (${registry.length}개)`, 'ls');
+}
+
+// ── 레지스트리 수신 후 기기 구독 시작 ──
+function applyRegistry(list){
+  registry = list;
+  _registryReceived = true;
+  clearTimeout(_registryTimeout);
+  document.getElementById('registry-loading').classList.add('hidden');
+  log(`📋 registry 수신: ${list.map(r=>r.id).join(', ')||'(비어있음)'}`, 'lx');
+
+  // 새로 추가된 기기만 구독
+  list.forEach(r => {
+    if(!state[r.id]){
+      state[r.id] = {online:false, lastSeen:0, channels:{}};
+      subscribeDevice(r.id);
+    }
+  });
+
+  buildDeviceCards();
+}
+
+function subscribeDevice(deviceId){
+  const base = `hdh/${deviceId}/`;
+  client.subscribe([base+'state/full', base+'ch/+/state', base+'meta/online', base+'meta/last_seen'], {qos:1}, err=>{
+    if(err){log(`❌ 구독 오류 [${deviceId}]: ${err}`, 'le'); return;}
+    log(`📡 [${deviceId}] 구독 완료`);
+    client.publish(`hdh/${deviceId}/get/state`, 'GET', {qos:1});
+    scheduleRetry(deviceId);
+  });
+}
+
+// ── MQTT ──
+let _retryTimers = {};
+
+function scheduleRetry(deviceId){
+  clearTimeout(_retryTimers[deviceId]);
+  if(Object.values(state[deviceId]?.channels||{}).some(ch=>ch.name?.trim())) return;
+  _retryTimers[deviceId] = setTimeout(()=>{
+    if(!client?.connected) return;
+    if(Object.values(state[deviceId]?.channels||{}).some(ch=>ch.name?.trim())) return;
+    log(`🔄 [${deviceId}] get/state 재시도`, 'lx');
+    client.publish(`hdh/${deviceId}/get/state`, 'GET', {qos:1});
+    scheduleRetry(deviceId);
+  }, 10000);
+}
+
+function connectMQTT(){
+  const url=document.getElementById('mqtt-url').value.trim();
+  const user=document.getElementById('mqtt-username').value.trim();
+  const pass=document.getElementById('mqtt-password').value;
+  window._auditUser = user;   // ★ 조작 로그에 사용할 사용자명
+  _initAudit();               // ★ 공인 IP 비동기 조회 (백그라운드)
+  const errEl=document.getElementById('login-error');
+  errEl.classList.add('hidden');
+  document.getElementById('btn-login-text').textContent='연결 중...';
+  document.getElementById('btn-spinner').classList.remove('hidden');
+
+  client = mqtt.connect(url, {username:user, password:pass, connectTimeout:8000, reconnectPeriod:0});
+
+  client.on('connect', ()=>{
+    document.getElementById('login-view').classList.add('hidden');
+    const dv = document.getElementById('dashboard-view');
+    dv.classList.remove('hidden'); dv.classList.add('flex');
+
+    // 1) 레지스트리 구독 (retain 메시지 즉시 수신)
+    document.getElementById('registry-loading').classList.remove('hidden');
+    client.subscribe(REGISTRY_TOPIC, {qos:1}, err=>{
+      if(err){log(`❌ registry 구독 오류: ${err}`, 'le'); return;}
+      log(`📡 registry 구독 완료 — retain 수신 대기`, 'lx');
+    });
+    // ★ auth/error 구독 — 아두이노 PIN 검증 실패 시 수신
+    client.subscribe('hdh/+/auth/error', {qos:1});
+    client.subscribe('hdh/+/auth/ok',    {qos:1});
+    client.subscribe('hdh/+/macro/list',  {qos:1});
+    client.subscribe('hdh/+/macro/error', {qos:1});
+
+    // 3초 내 registry 미수신 시
+    // ★ applyRegistry([]) 호출 금지 — registry 변수를 비우면
+    //    이후 saveRegistry()가 빈 배열을 덮어쓸 위험이 있음
+    // → UI만 처리하고 registry는 빈 배열로 초기화
+    _registryTimeout = setTimeout(()=>{
+      if(!_registryReceived){
+        log('⚠️ registry retain 없음 — 빈 목록으로 시작 (HiveMQ에 저장 안 함)', 'lx');
+        document.getElementById('registry-loading').classList.add('hidden');
+        registry = [];   // RAM만 초기화, publish 안 함
+        buildDeviceCards();
+      }
+    }, 3000);
+  });
+
+  client.on('message', onMessage);
+  client.on('error', err=>{
+    errEl.textContent='연결 실패: '+err.message; errEl.classList.remove('hidden');
+    document.getElementById('btn-login-text').textContent='통합 관제 연결';
+    document.getElementById('btn-spinner').classList.add('hidden');
+  });
+}
+
+function disconnectMQTT(){
+  Object.values(_retryTimers).forEach(t=>clearTimeout(t));
+  _retryTimers = {}; state = {}; registry = []; _registryReceived = false;
+  client?.end();
+  const dv = document.getElementById('dashboard-view');
+  dv.classList.add('hidden'); dv.classList.remove('flex');
+  document.getElementById('login-view').classList.remove('hidden');
+  document.getElementById('btn-login-text').textContent='통합 관제 연결';
+  document.getElementById('btn-spinner').classList.add('hidden');
+}
+
+// ── 메시지 수신 ──
+function onMessage(topic, buf){
+  const payload = buf.toString();
+
+  // ── 글로벌 토픽 처리 (deviceId 불필요) ──────────────────────────
+  if(topic.endsWith('/auth/error')){
+    try{
+      const data = JSON.parse(payload);
+      log(`🔒 PIN 오류: ${data.msg}`, 'le');
+      showAuthError(data.msg || 'PIN이 틀렸습니다');
+    }catch(e){ showAuthError('PIN 검증 실패'); }
+    return;
+  }
+  if(topic.endsWith('/auth/ok')){
+    log(`✅ PIN 검증 성공`, 'lr');
+    closePinModal();          // PIN 입력 팝업만 닫음 (설정 모달은 유지)
+    const deviceId = topic.split('/')[1];
+    // 모드 변경 성공 → 아두이노가 publishState(ch)도 보내므로 ch/state 핸들러가 탭 동기화함
+    // 보조로 최신 상태 요청
+    setTimeout(()=>client?.publish(`hdh/${deviceId}/get/state`,'GET',{qos:1}),200);
+    return;
+  }
+  // ── 매크로 목록 수신 ──
+  if(topic.endsWith('/macro/list')){
+    const deviceId = topic.split('/')[1];
+    try{ _macros[deviceId] = JSON.parse(payload||'[]'); }catch(e){ _macros[deviceId]=[]; }
+    renderMacroList(deviceId);
+    renderMacroButtons(deviceId);
+    const msg=document.getElementById('macro-msg');
+    if(msg && msg.style.color==='rgb(37, 99, 235)'){ msg.textContent='✅ 저장 완료'; msg.style.color='#16a34a'; }
+    return;
+  }
+  // ── 매크로 컴파일 에러 수신 ──
+  if(topic.endsWith('/macro/error')){
+    try{
+      const data=JSON.parse(payload);
+      const msg=document.getElementById('macro-msg');
+      if(msg){ msg.textContent='❌ '+(data.msg||'컴파일 오류'); msg.style.color='#ef4444'; }
+      log(`❌ 매크로 오류: ${data.msg}`,'le');
+    }catch(e){}
+    return;
+  }
+  if(topic === REGISTRY_TOPIC){
+    try{
+      const list = JSON.parse(payload||'[]');
+      applyRegistry(Array.isArray(list)?list:[]);
+    }catch(e){ log(`⚠️ registry 파싱 오류: ${e.message}`, 'le'); }
+    return;
+  }
+
+  const parts = topic.split('/');
+  const deviceId = parts[1];
+  if(!deviceIds().includes(deviceId)) return;
+  const leaf = topic.replace(`hdh/${deviceId}/`,'');
+  log(`📥 [${deviceId}] ${leaf} ← ${payload.length>60?payload.slice(0,60)+'…':payload}`, 'lr');
+
+  try{
+    if(topic.endsWith('/state/full')){
+      const data = JSON.parse(payload);
+      (data.ch||[]).forEach(ch=>{state[deviceId].channels[ch.n]={...(state[deviceId].channels[ch.n]||{}),...ch};});
+      clearTimeout(_retryTimers[deviceId]);
+      // ★ state/full 수신 = 장치가 응답하고 있음 → 온라인 강제 설정
+      // (브로커에 LWT retain이 남아있어도 실제 동작 중이면 온라인으로 표시)
+      setOnline(deviceId, true);
+      renderDevice(deviceId);
+      // 매크로 목록도 요청 (빠른 실행 버튼 렌더용)
+      if(!_macros[deviceId]) client?.publish(`hdh/${deviceId}/get/macro`,'GET',{qos:1});
+      return;
+    }
+    const m = topic.match(/\/ch\/(\d+)\/state$/);
+    if(m){
+      const n=parseInt(m[1]), d=JSON.parse(payload);
+      state[deviceId].channels[n]={...(state[deviceId].channels[n]||{}), relay:d.relay, mode:d.mode};
+      // ★ pending 해제 → 아두이노 확인된 상태로만 색깔/모드 반영
+      const key=`${deviceId}:${n}`;
+      clearTimeout(_pendingCh?.get(key));
+      _pendingCh?.delete(key);
+      renderChBtn(deviceId,n);
+      // 모달이 이 채널을 표시 중이면 탭도 동기화 (PIN 틀렸을 때 롤백 포함)
+      if(_ctx?.deviceId===deviceId && _ctx?.chNum===n){
+        // ★ 탭 강제 전환 방지: 현재 보고 있는 탭이 '채널설정(cfg)' 이라면 탭을 바꾸지 않음
+        if(_modalTab !== 'cfg') {
+          _modalTab=d.mode; 
+        }
+        renderModal();
+      }
+      return;
+    }
+    if(topic.endsWith('/meta/online')){setOnline(deviceId,!!JSON.parse(payload).online);return;}
+    if(topic.endsWith('/meta/last_seen')){
+      state[deviceId].lastSeen=JSON.parse(payload).epoch;
+      const el=document.getElementById(`meta-${deviceId}`);
+      if(el)el.textContent='최근: '+new Date(state[deviceId].lastSeen*1000).toLocaleString('ko',{hour12:false,month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+    }
+  }catch(e){log(`⚠️ JSON 오류: ${e.message}`, 'le');}
+}
+
+function requestAllStates(){
+  Object.values(_retryTimers).forEach(t=>clearTimeout(t));
+  _retryTimers = {};
+  deviceIds().forEach(id=>{
+    client?.publish(`hdh/${id}/get/state`, 'GET', {qos:1});
+    log(`📤 [${id}] get/state 재요청`, 'ls');
+    scheduleRetry(id);
+  });
+}
+
+// ── 카드 생성 ──
+function buildDeviceCards(){
+  const active = registry.filter(r=>r.enabled!==false);
+  const inactive = registry.filter(r=>r.enabled===false);
+
+  if(registry.length===0){
+    document.getElementById('device-cards').innerHTML=`
+      <div class="card text-center py-8">
+        <p class="text-slate-400 text-sm font-bold mb-1">등록된 기기가 없습니다</p>
+        <p class="text-[11px] text-slate-400 mb-4">상단 표 아이콘을 눌러 기기를 추가하세요</p>
+        <button onclick="openRegistryModal()" class="btn-sm btn-add px-6">기기 추가하기</button>
+      </div>`;
+    return;
+  }
+
+  const activeCards = active.map(r=>`
+    <div id="card-${r.id}" class="card mb-4">
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center gap-3">
+          <span class="text-[9px] font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded-md tracking-widest">${esc(r.id.toUpperCase())}</span>
+          <div>
+            <p class="text-sm font-extrabold text-slate-800 leading-tight">${esc(r.label||r.id)}</p>
+            <p id="meta-${r.id}" class="text-[10px] text-slate-400 mt-0.5">—</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <span id="badge-${r.id}" class="badge badge-chk">확인 중</span>
+          <!-- 카드 내 빠른 비활성화 토글 -->
+          <button onclick="toggleRegEnabled('${r.id}')" title="비활성화"
+                  style="width:32px;height:18px;border-radius:9px;border:none;cursor:pointer;background:#3b82f6;position:relative;flex-shrink:0">
+            <span style="position:absolute;top:1px;left:15px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.2)"></span>
+          </button>
+        </div>
+      </div>
+      <div id="channels-${r.id}" class="grid grid-cols-3 gap-4 min-h-[72px]">
+        <div class="col-span-3 text-center text-xs text-slate-400 py-4">상태 조회 중...</div>
+      </div>
+      <div class="mt-4 pt-4 border-t border-slate-100">
+        <div class="grid grid-cols-2 gap-2">
+          <input id="add-name-${r.id}" class="input-field text-xs" placeholder="채널 이름">
+          <input id="add-pin-${r.id}" class="input-field text-xs" type="number" min="0" max="127" placeholder="GPIO Pin">
+          <input id="add-ch-${r.id}" class="input-field text-xs" type="number" min="1" max="28" placeholder="채널 번호 (1~28)">
+          <button onclick="addChannel('${r.id}')" class="btn-sm btn-add">+ 추가</button>
+        </div>
+        <label style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:11px;color:#64748b;cursor:pointer;">
+          <input type="checkbox" id="add-inv-${r.id}" checked style="width:14px;height:14px;accent-color:#3b82f6;">
+          신호 반전 (Active LOW) — 일반 릴레이 보드
+        </label>
+        <p id="add-err-${r.id}" class="text-red-500 text-[10px] font-bold mt-1 hidden"></p>
+        <button onclick="showAuditLog('${r.id}')"
+          style="margin-top:10px;width:100%;padding:8px;border-radius:10px;border:1px solid #e2e8f0;background:#f8fafc;font-size:11px;font-weight:700;color:#64748b;cursor:pointer;">
+          📋 조작 기록 보기 (Firebase)
+        </button>
+        <button onclick="openMacroModal('${r.id}')"
+          style="margin-top:6px;width:100%;padding:8px;border-radius:10px;border:1px solid #c7d2fe;background:#eef2ff;font-size:11px;font-weight:700;color:#4f46e5;cursor:pointer;">
+          ⚙️ 매크로 편집 / 실행
+        </button>
+        <div id="macro-btns-${r.id}" class="grid grid-cols-2 gap-2 mt-2"></div>
+      </div>
+    </div>`).join('');
+
+  // 비활성 기기는 접힌 요약 행으로만 표시
+  const inactiveSection = inactive.length===0?'':
+    `<div class="card mb-4" style="opacity:.6">
+      <p class="text-[10px] font-bold text-slate-400 mb-2">⏸ 비활성 기기 (${inactive.length}개)</p>
+      ${inactive.map(r=>`
+        <div class="flex items-center justify-between py-2 border-b border-slate-100 last:border-0">
+          <span class="text-[11px] text-slate-500">${esc(r.id)} <span class="text-slate-400">${esc(r.label||'')}</span></span>
+          <button onclick="toggleRegEnabled('${r.id}')" class="btn-sm btn-add" style="font-size:10px;padding:4px 10px;">활성화</button>
+        </div>`).join('')}
+    </div>`;
+
+  document.getElementById('device-cards').innerHTML = activeCards + inactiveSection;
+}
+
+// ── 렌더링 ──
+function renderDevice(deviceId){
+  const chs=state[deviceId]?.channels||{};
+  const named=Object.keys(chs).map(Number).filter(n=>chs[n]?.name?.trim()||chs[n]?.pin!==undefined).sort((a,b)=>a-b);
+  const wrap=document.getElementById(`channels-${deviceId}`);
+  if(!wrap)return;
+  wrap.innerHTML=named.length===0
+    ?'<div class="col-span-3 text-center text-xs text-slate-400 py-4">이름이 설정된 채널이 없습니다</div>'
+    :named.map(n=>chBtnHTML(deviceId,n)).join('');
+  const inp=document.getElementById(`add-ch-${deviceId}`);
+  if(inp){
+    const used=[...named].sort((a,b)=>a-b);
+    // 비어있는 첫 채널 번호를 기본값 placeholder로 제안
+    let next=1; while(used.includes(next)&&next<=28) next++;
+    inp.placeholder = used.length ? `채널 (사용중: ${used.join(',')})` : '채널 번호 (1~28)';
+    if(!inp.value) inp.value = next<=28 ? next : '';
+  }
+  lucide.createIcons();
+}
+
+function chBtnHTML(deviceId,chNum){
+  const ch=state[deviceId]?.channels[chNum]||{};
+  const on=!!ch.relay, mode=Number(ch.mode)||0;
+  const isR3=!!ch.r3;
+  const pinMissing=isR3&&(ch.pin===255||ch.pin===undefined);
+  const hex=chHex(chNum);
+  const bg=on&&!pinMissing?`background:${hex}`:'';
+  const mtag=['','mt-sch','mt-cir','mt-inc'][mode]||'';
+  const mlbl=['','스케줄','순환','인칭'][mode]||'';
+  return `
+  <div class="ch-btn" id="chbtn-${deviceId}-${chNum}">
+    ${mode>0?`<span class="mode-tag ${mtag}">${mlbl}</span>`:''}
+    ${isR3?'<span class="mode-tag" style="background:#fef3c7;color:#92400e;top:-9px;">R3</span>':''}
+    <div class="ch-circle ${on&&!pinMissing?'on':'off'}" style="${bg}" onclick="${pinMissing?`openCfg('${deviceId}',${chNum})`:`toggleChannel('${deviceId}',${chNum})`}">
+      <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="color:${on&&!pinMissing?'#fff':'#94a3b8'}">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v4M6.34 6.34l2.83 2.83M3 12h4M6.34 17.66l2.83-2.83M12 17v4M17.66 17.66l-2.83-2.83M21 12h-4M17.66 6.34l-2.83 2.83"/>
+      </svg>
+      <span class="ch-gear" onclick="event.stopPropagation();openCfg('${deviceId}',${chNum})">
+        <svg class="w-3 h-3 gear-icon" style="color:#94a3b8" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+          <circle cx="12" cy="12" r="3"/>
+        </svg>
+      </span>
+    </div>
+    <span class="text-[11px] font-bold text-center leading-tight" style="color:${on&&!pinMissing?hex:'#64748b'}">
+      ${pinMissing?'<span style="color:#f59e0b;font-size:9px;">⚙핀설정</span>':esc(ch.name||'CH'+chNum)}<br><span class="text-[9px] text-slate-400 font-normal">CH${chNum}${isR3?' (R3)':''}</span>
+    </span>
+  </div>`;
+}
+function renderChBtn(deviceId,chNum){const el=document.getElementById(`chbtn-${deviceId}-${chNum}`);if(el){el.outerHTML=chBtnHTML(deviceId,chNum);lucide.createIcons();}}
+function setOnline(deviceId,online){
+  if(!state[deviceId]) return;
+  state[deviceId].online=online;
+  const card=document.getElementById(`card-${deviceId}`);
+  const badge=document.getElementById(`badge-${deviceId}`);
+  if(!card||!badge)return;
+  card.classList.toggle('device-offline',!online);
+  badge.className='badge '+(online?'badge-on':'badge-off');
+  badge.textContent=online?'온라인':'오프라인';
+}
+
+// ── pending 채널 추적 ──
+const _pendingCh = new Map();
+
+// ── 채널 토글 ──
+function toggleChannel(deviceId,chNum){
+  if(!client?.connected)return;
+  const ch=state[deviceId]?.channels[chNum];
+  const cmd=ch?.relay?'OFF':'ON';
+  const chName=ch?.name||`CH${chNum}`;
+  // ★ publishCmd: MQTT 전송 + Firebase 로그 기록
+  publishCmd(deviceId,`hdh/${deviceId}/ch/${chNum}/cmd`,cmd,`${cmd} ${chName}`);
+  // pending 깜빡임 (Arduino ch/{n}/state 응답 전까지)
+  const key=`${deviceId}:${chNum}`;
+  const circle=document.getElementById(`chbtn-${deviceId}-${chNum}`)?.querySelector('.ch-circle');
+  if(circle) circle.classList.add('pending');
+  clearTimeout(_pendingCh.get(key));
+  _pendingCh.set(key,setTimeout(()=>{
+    document.getElementById(`chbtn-${deviceId}-${chNum}`)?.querySelector('.ch-circle')?.classList.remove('pending');
+    _pendingCh.delete(key);
+  },2000));
+}
+
+// ── 채널 추가 ──
+function addChannel(deviceId){
+  const name=document.getElementById(`add-name-${deviceId}`).value.trim();
+  const pin=parseInt(document.getElementById(`add-pin-${deviceId}`).value);
+  const chNum=parseInt(document.getElementById(`add-ch-${deviceId}`).value);
+  // ★ 신호 반전 체크박스: 체크=active LOW(lvl=0), 미체크=active HIGH(lvl=1)
+  const invEl=document.getElementById(`add-inv-${deviceId}`);
+  const lvl = (invEl && invEl.checked) ? 0 : 1;
+  const errEl=document.getElementById(`add-err-${deviceId}`);
+  const setErr=m=>{errEl.textContent=m;errEl.classList.toggle('hidden',!m);};
+  setErr('');
+  if(!name)return setErr('채널 이름을 입력하세요.');
+  if(/\s/.test(name))return setErr('이름에 공백 불가.');
+  if(new TextEncoder().encode(name).length>15)return setErr('이름은 UTF-8 15바이트 이하.');
+  if(!Number.isInteger(chNum)||chNum<1||chNum>28)return setErr('채널 번호: 1~28 (R4=1~12, R3 모스펫=13~20, R3 LED=21~28)');
+  if(!Number.isInteger(pin)||pin<0||pin>127)return setErr('GPIO Pin: 0~127');
+  client.publish(`hdh/${deviceId}/cfg/ch/${chNum}/pin`,`${pin} ${lvl} 0`,{qos:1});
+  client.publish(`hdh/${deviceId}/cfg/ch/${chNum}/name`,name,{qos:1});
+  log(`📤 CH${chNum} 추가: ${name} (pin=${pin}, lvl=${lvl}${lvl===0?' [Active LOW]':' [Active HIGH]'})`,'ls');
+  if(!state[deviceId])state[deviceId]={online:false,lastSeen:0,channels:{}};
+  state[deviceId].channels[chNum]={name,pin,lvl,init:0,mode:0,relay:false,schedule:[],circulate:[]};
+  renderDevice(deviceId);
+  document.getElementById(`add-name-${deviceId}`).value='';
+  document.getElementById(`add-pin-${deviceId}`).value='';
+  setTimeout(()=>client?.publish(`hdh/${deviceId}/get/state`,'GET',{qos:1}),600);
+}
+
+// ════════════════════════════════════════════
+//  기기 레지스트리 관리 모달
+// ════════════════════════════════════════════
+let _regEditId = null; // 수정 중인 기기 id
+
+function openRegistryModal(){
+  _regEditId = null;
+  renderRegistryModal();
+  document.getElementById('registry-modal').classList.remove('hidden');
+}
+function closeRegistryModal(){
+  document.getElementById('registry-modal').classList.add('hidden');
+  _regEditId = null;
+}
+
+function renderRegistryModal(){
+  const rows = registry.map((r,i)=>{
+    const editing = _regEditId === r.id;
+    const enabled = r.enabled !== false; // 기본값 true
+    if(editing){
+      return `
+      <div class="reg-row editing">
+        <div class="flex-1 space-y-1">
+          <input id="reg-edit-id" class="input-sm" placeholder="기기 ID (예: box03)" value="${esc(r.id)}">
+          <input id="reg-edit-label" class="input-sm" placeholder="설명 (예: 3구역 분무)" value="${esc(r.label||'')}">
+        </div>
+        <button class="btn-sm btn-add" onclick="saveRegEdit('${r.id}')">저장</button>
+        <button class="btn-sm btn-gray" onclick="cancelRegEdit()">취소</button>
+      </div>`;
+    }
+    return `
+    <div class="reg-row" style="${enabled?'':'opacity:.5'}">
+      <div class="flex-1 min-w-0">
+        <p class="text-[11px] font-bold text-slate-700 truncate">${esc(r.id)} ${enabled?'':'<span class="text-[9px] text-slate-400">(비활성)</span>'}</p>
+        <p class="text-[10px] text-slate-400 truncate">${esc(r.label||'설명 없음')}</p>
+      </div>
+      <!-- ON/OFF 토글 -->
+      <button onclick="toggleRegEnabled('${r.id}')" title="${enabled?'비활성화':'활성화'}"
+              style="width:36px;height:20px;border-radius:10px;border:none;cursor:pointer;transition:background .2s;flex-shrink:0;position:relative;background:${enabled?'#3b82f6':'#e2e8f0'}">
+        <span style="position:absolute;top:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .2s;left:${enabled?'18px':'2px'};box-shadow:0 1px 3px rgba(0,0,0,.2)"></span>
+      </button>
+      <button class="btn-sm btn-gray" onclick="startRegEdit('${r.id}')">수정</button>
+      <button class="btn-sm btn-del" onclick="deleteRegEntry('${r.id}')">삭제</button>
+    </div>`;
+  }).join('');
+
+  document.getElementById('registry-modal-content').innerHTML=`
+    <div class="flex items-center justify-between mb-5">
+      <div>
+        <p class="font-extrabold text-slate-800">기기 목록 관리</p>
+        <p class="text-[11px] text-slate-400 mt-0.5">HiveMQ retain 저장 · ${registry.length}개 등록됨</p>
+      </div>
+      <span class="text-[10px] bg-purple-100 text-purple-700 font-bold px-2 py-1 rounded-lg">hdh/registry</span>
+    </div>
+
+    <div id="reg-list">
+      ${rows||'<p class="text-xs text-slate-400 text-center py-4">등록된 기기가 없습니다</p>'}
+    </div>
+
+    <div class="setting-row mt-3">
+      <p class="text-[10px] font-bold text-slate-500 mb-2">새 기기 추가</p>
+      <div class="space-y-2 mb-3">
+        <input id="reg-new-id" class="input-sm" placeholder="기기 ID (예: box03)" maxlength="20">
+        <input id="reg-new-label" class="input-sm" placeholder="설명 (예: 3구역 분무경)">
+      </div>
+      <button class="btn-sm btn-add w-full" onclick="addRegEntry()">+ 기기 추가</button>
+      <p id="reg-new-err" class="text-red-500 text-[9px] mt-1 hidden"></p>
+    </div>
+
+    <div class="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+      <p class="text-[10px] font-bold text-amber-700 mb-1">⚠ retain 저장 안내</p>
+      <p class="text-[10px] text-amber-600">추가/수정/삭제 즉시 HiveMQ에 retain 저장됩니다. 다음 접속 시 자동으로 복원됩니다.</p>
+    </div>
+
+    <div class="setting-row mt-3">
+      <p class="text-[10px] font-bold text-slate-500 mb-2">🔒 채널 설정 PIN 변경</p>
+      <p class="text-[10px] text-slate-400 mb-2">현재 PIN: ****  &nbsp;(기본값 0000)</p>
+      <div style="display:flex;gap:8px;align-items:flex-end;">
+        <div class="flex-1">
+          <label class="text-[9px] text-slate-400">새 PIN (4자리 숫자)</label>
+          <input id="new-pin-input" class="input-sm" type="tel" inputmode="numeric" maxlength="4" placeholder="0000">
+        </div>
+        <button class="btn-sm btn-add" onclick="changePin()">변경</button>
+      </div>
+      <p id="pin-change-msg" class="text-[10px] mt-1 hidden"></p>
+    </div>`;
+}
+
+function changePin(){
+  const newVal = document.getElementById('new-pin-input')?.value?.trim();
+  const msg = document.getElementById('pin-change-msg');
+  if(!msg) return;
+  if(!/^\d{4}$/.test(newVal)){
+    msg.textContent='4자리 숫자를 입력하세요.'; msg.style.color='#ef4444'; msg.classList.remove('hidden'); return;
+  }
+  // 현재 PIN을 먼저 입력받아서 아두이노로 전달
+  promptPin(currentPin=>{
+    // payload: "<currentPIN> <newPIN>" → 아두이노가 currentPIN 검증 후 변경
+    const deviceId = registry[0]?.id;  // 첫 번째 기기에 PIN 변경
+    if(!deviceId){ msg.textContent='기기 없음'; msg.classList.remove('hidden'); return; }
+    client?.publish(`hdh/${deviceId}/cfg/setpin`, `${currentPin} ${newVal}`, {qos:1});
+    msg.textContent=`PIN 변경 요청 전송 → 아두이노 검증 중`; msg.style.color='#2563eb'; msg.classList.remove('hidden');
+    document.getElementById('new-pin-input').value='';
+    setTimeout(()=>msg.classList.add('hidden'), 4000);
+  }, '현재 PIN 입력');
+}
+
+function toggleRegEnabled(id){
+  const r = registry.find(r=>r.id===id);
+  if(!r) return;
+  r.enabled = !r.enabled;
+  saveRegistry();
+  buildDeviceCards();
+  renderRegistryModal();
+  log(`${r.enabled?'✅':'⏸'} [${id}] ${r.enabled?'활성화':'비활성화'}`, 'lx');
+}
+
+function startRegEdit(id){
+  _regEditId = id;
+  renderRegistryModal();
+}
+function cancelRegEdit(){
+  _regEditId = null;
+  renderRegistryModal();
+}
+function saveRegEdit(oldId){
+  const newId = document.getElementById('reg-edit-id').value.trim();
+  const newLabel = document.getElementById('reg-edit-label').value.trim();
+  if(!newId){ alert('기기 ID를 입력하세요.'); return; }
+  if(!/^[a-zA-Z0-9_-]+$/.test(newId)){ alert('ID는 영문·숫자·_·- 만 가능합니다.'); return; }
+  if(newId !== oldId && registry.some(r=>r.id===newId)){ alert('이미 존재하는 ID입니다.'); return; }
+
+  const idx = registry.findIndex(r=>r.id===oldId);
+  if(idx<0) return;
+
+  // ID 변경 시 state도 이전
+  if(newId !== oldId){
+    state[newId] = state[oldId]||{online:false,lastSeen:0,channels:{}};
+    delete state[oldId];
+    clearTimeout(_retryTimers[oldId]);
+    delete _retryTimers[oldId];
+  }
+
+  registry[idx] = {id:newId, label:newLabel};
+  _regEditId = null;
+  saveRegistry();
+  buildDeviceCards();
+
+  // ID 바뀐 경우 새 기기 구독
+  if(newId !== oldId) subscribeDevice(newId);
+
+  renderRegistryModal();
+}
+
+function addRegEntry(){
+  const id = document.getElementById('reg-new-id').value.trim();
+  const label = document.getElementById('reg-new-label').value.trim();
+  const errEl = document.getElementById('reg-new-err');
+  const setErr = m=>{errEl.textContent=m; errEl.classList.toggle('hidden',!m);};
+  setErr('');
+  if(!id) return setErr('기기 ID를 입력하세요.');
+  if(!/^[a-zA-Z0-9_-]+$/.test(id)) return setErr('ID는 영문·숫자·_·- 만 가능합니다.');
+  if(registry.some(r=>r.id===id)) return setErr('이미 존재하는 ID입니다.');
+
+  registry.push({id, label, enabled:true});
+  state[id] = {online:false, lastSeen:0, channels:{}};
+  saveRegistry();
+  buildDeviceCards();
+  subscribeDevice(id);
+  document.getElementById('reg-new-id').value='';
+  document.getElementById('reg-new-label').value='';
+  renderRegistryModal();
+  log(`➕ 기기 추가: ${id}`, 'ls');
+}
+
+function deleteRegEntry(id){
+  const entry = registry.find(r=>r.id===id);
+  if(!confirm(`"${entry?.label||id}" 기기를 목록에서 삭제하시겠습니까?\n(아두이노 설정은 변경되지 않습니다)`)) return;
+  registry = registry.filter(r=>r.id!==id);
+  clearTimeout(_retryTimers[id]);
+  delete _retryTimers[id];
+  // 의도적 삭제: 빈 배열이어도 HiveMQ에 저장 (saveRegistry 보호 로직 우회)
+  if(client?.connected){
+    client.publish(REGISTRY_TOPIC, JSON.stringify(registry), {qos:1, retain:true});
+    log(`📤 registry 저장 (${registry.length}개)`, 'ls');
+  }
+  buildDeviceCards();
+  renderRegistryModal();
+  log(`🗑 기기 삭제: ${id}`, 'lx');
+}
+
+// ════════════════════════════════════════════
+//  채널 설정 모달
+// ════════════════════════════════════════════
+let _ctx=null;
+let _modalTab=null;
+
+function openCfg(deviceId,chNum){_ctx={deviceId,chNum};_modalTab=null;renderModal();document.getElementById('cfg-modal').classList.remove('hidden');}
+function closeModal(){document.getElementById('cfg-modal').classList.add('hidden');_ctx=null;_modalTab=null;}
+function switchModalTab(tab){
+  _modalTab=tab;
+  if(typeof tab==='number'){
+    // ★ 모드 변경: PIN 확인 → 아두이노에서 검증
+    promptPin(cfgPin=>{ setMode(_ctx.deviceId,_ctx.chNum,tab,cfgPin); });
+  } else renderModal();
+}
+
+function renderModal(){
+  if(!_ctx)return;
+  const {deviceId,chNum}=_ctx;
+  const ch=state[deviceId]?.channels[chNum]||{};
+  const mode=Number(ch.mode)||0;
+  const tab=_modalTab!==null?_modalTab:mode;
+  const mN=['수동','스케줄','순환','인칭'];
+  let detail;
+  if(tab==='cfg')detail=chCfgUI(deviceId,chNum,ch);
+  else if(tab===1)detail=schUI(deviceId,chNum,ch);
+  else if(tab===2)detail=cirUI(deviceId,chNum,ch);
+  else if(tab===3)detail=inchUI(deviceId,chNum,ch);
+  else detail=manualUI(deviceId,chNum,ch);
+  const hex=chHex(chNum);
+  document.getElementById('modal-content').innerHTML=`
+    <div class="flex items-center gap-3 mb-5">
+      <div class="w-10 h-10 rounded-full flex items-center justify-center" style="background:${hex}22">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="color:${hex}">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v4M6.34 6.34l2.83 2.83M3 12h4M6.34 17.66l2.83-2.83M12 17v4M17.66 17.66l-2.83-2.83M21 12h-4M17.66 6.34l-2.83 2.83"/>
+        </svg>
+      </div>
+      <div>
+        <p class="font-bold text-slate-800">${esc(ch.name||'CH'+chNum)} <span class="text-slate-400 text-xs font-normal">CH${chNum} · pin${ch.pin??'?'}</span></p>
+        <p class="text-[11px] text-slate-400">현재 ${mN[mode]} 모드</p>
+      </div>
+    </div>
+    <div class="flex gap-2 flex-wrap mb-4">
+      <button class="mode-tab${tab==='cfg'?' active':''}" style="${tab==='cfg'?'background:#0f172a;color:#fff;border-color:#0f172a':''}" onclick="switchModalTab('cfg')">⚙ 채널설정</button>
+      ${[0,1,2,3].map(m=>`<button class="mode-tab${tab===m?' active':''}" onclick="switchModalTab(${m})">${mN[m]}</button>`).join('')}
+    </div>
+    <div id="modal-detail">${detail}</div>`;
+}
+
+function setMode(deviceId,chNum,m,cfgPin){
+  // payload: "<PIN> <mode>" → 아두이노 PIN 검증 후 모드 적용
+  // ★ 낙관적 업데이트 제거: 아두이노가 doMode 성공 후 publishState(ch)를 보내면
+  //    그때 onMessage의 ch/{n}/state 핸들러가 mode를 업데이트함
+  //    PIN이 틀리면 auth/error만 오고 state는 변하지 않으므로 UI도 그대로 유지됨
+  client?.publish(`hdh/${deviceId}/ch/${chNum}/mode`,`${cfgPin} ${m}`,{qos:1});
+  log(`📤 ${deviceId}/ch/${chNum}/mode → [PIN]${m} (아두이노 검증 대기)`,'ls');
+  // 버튼에 pending 표시
+  const el=document.getElementById(`chbtn-${deviceId}-${chNum}`);
+  const circle=el?.querySelector('.ch-circle');
+  if(circle) circle.classList.add('pending');
+  const key=`${deviceId}:${chNum}`;
+  clearTimeout(_pendingCh.get(key));
+  _pendingCh.set(key,setTimeout(()=>{
+    document.getElementById(`chbtn-${deviceId}-${chNum}`)?.querySelector('.ch-circle')?.classList.remove('pending');
+    _pendingCh.delete(key);
+  },3000));
+}
+
+function chCfgUI(deviceId,chNum,ch){
+  const pin=ch.pin??0, init=Number(ch.init??0), lvl=Number(ch.lvl??1);
+  return`
+  <div class="setting-row mb-3">
+    <p class="text-[10px] font-bold text-slate-500 mb-2">채널 이름</p>
+    <p class="text-[9px] text-slate-400 mb-2">최대 15바이트 (한글 5자)</p>
+    <div class="flex gap-2">
+      <input id="cfg-name-${chNum}" class="input-sm flex-1" value="${esc(ch.name||'')}" maxlength="15" placeholder="채널 이름">
+      <button class="btn-sm btn-add" onclick="saveName('${deviceId}',${chNum})">저장</button>
+    </div>
+    <p id="cfg-name-err-${chNum}" class="text-red-500 text-[9px] mt-1 hidden"></p>
+  </div>
+  <div class="setting-row mb-3">
+    <p class="text-[10px] font-bold text-slate-500 mb-2">GPIO 핀 설정</p>
+    <div class="grid grid-cols-2 gap-2 mb-2">
+      <div><label class="text-[9px] text-slate-400">GPIO 번호 (0~127)</label>
+           <input id="cfg-pin-${chNum}" class="input-sm" type="number" min="0" max="127" value="${pin}"></div>
+      <div><label class="text-[9px] text-slate-400">초기 상태</label>
+           <select id="cfg-init-${chNum}" class="input-sm">
+             <option value="0" ${init===0?'selected':''}>OFF</option>
+             <option value="1" ${init===1?'selected':''}>ON</option>
+           </select></div>
+    </div>
+    <div class="mb-2">
+      <label class="text-[9px] text-slate-400">신호 레벨 (릴레이 종류)</label>
+      <select id="cfg-lvl-${chNum}" class="input-sm mt-1">
+        <option value="0" ${lvl===0?'selected':''}>Active LOW — LOW=ON (일반 릴레이 보드)</option>
+        <option value="1" ${lvl===1?'selected':''}>Active HIGH — HIGH=ON (SSR·모스펫 등)</option>
+      </select>
+    </div>
+    <button class="btn-sm btn-add w-full" onclick="savePin('${deviceId}',${chNum})">핀 설정 저장</button>
+    <p id="cfg-pin-err-${chNum}" class="text-red-500 text-[9px] mt-1 hidden"></p>
+  </div>
+  <div class="setting-row" style="background:#fff5f5;border:1px solid #fecaca;border-radius:12px;">
+    <p class="text-[10px] font-bold text-red-500 mb-1">⚠ 채널 삭제</p>
+    <p class="text-[10px] text-slate-500 mb-3">이름·핀·스케줄·순환 설정이 모두 초기화됩니다.</p>
+    <button class="btn-sm btn-del w-full" onclick="confirmDeleteChannel('${deviceId}',${chNum})">CH${chNum} 삭제</button>
+  </div>`;
+}
+
+function saveName(deviceId,chNum){
+  const val=document.getElementById(`cfg-name-${chNum}`).value.trim();
+  const errEl=document.getElementById(`cfg-name-err-${chNum}`);
+  const setErr=m=>{errEl.textContent=m;errEl.classList.toggle('hidden',!m);};
+  setErr('');
+  if(!val)return setErr('이름을 입력하세요.');
+  if(new TextEncoder().encode(val).length>15)return setErr('15바이트 초과.');
+  client?.publish(`hdh/${deviceId}/cfg/ch/${chNum}/name`,val,{qos:1});
+  log(`📤 name CH${chNum} → ${val}`,'ls');
+  if(!state[deviceId])state[deviceId]={online:false,lastSeen:0,channels:{}};
+  state[deviceId].channels[chNum]={...(state[deviceId].channels[chNum]||{}),name:val};
+  renderDevice(deviceId); renderModal();
+}
+function savePin(deviceId,chNum){
+  const pin=parseInt(document.getElementById(`cfg-pin-${chNum}`).value);
+  const init=parseInt(document.getElementById(`cfg-init-${chNum}`).value);
+  const lvl=parseInt(document.getElementById(`cfg-lvl-${chNum}`).value);
+  const errEl=document.getElementById(`cfg-pin-err-${chNum}`);
+  const setErr=m=>{errEl.textContent=m;errEl.classList.toggle('hidden',!m);};
+  setErr('');
+  if(!Number.isInteger(pin)||pin<0||pin>127)return setErr('GPIO: 0~127');
+  client?.publish(`hdh/${deviceId}/cfg/ch/${chNum}/pin`,`${pin} ${lvl} ${init}`,{qos:1});
+  log(`📤 pin CH${chNum} → pin=${pin} lvl=${lvl}(${lvl===0?'ActiveLOW':'ActiveHIGH'}) init=${init}`,'ls');
+  state[deviceId].channels[chNum]={...(state[deviceId].channels[chNum]||{}),pin,lvl,init};
+}
+function confirmDeleteChannel(deviceId,chNum){
+  const name=(state[deviceId]?.channels[chNum]||{}).name||`CH${chNum}`;
+  if(!confirm(`"${name}" 채널을 삭제하시겠습니까?`))return;
+  client?.publish(`hdh/${deviceId}/ch/${chNum}/clear`,'1',{qos:1});
+  client?.publish(`hdh/${deviceId}/cfg/ch/${chNum}/name`,'',{qos:1});
+  client?.publish(`hdh/${deviceId}/cfg/ch/${chNum}/pin`,'255 1 0',{qos:1});
+  log(`📤 CH${chNum} 삭제`,'ls');
+  delete state[deviceId].channels[chNum];
+  closeModal(); renderDevice(deviceId);
+}
+
+// ── 수동 모드 UI (카운트다운 포함) ──
+function manualUI(deviceId,chNum,ch){
+  const on=!!ch.relay;
+  return`
+  <div class="setting-row mb-3">
+    <p class="text-[10px] font-bold text-slate-500 mb-2">직접 제어</p>
+    <div class="flex gap-2">
+      <button class="btn-sm btn-add flex-1" onclick="sendCmd('${deviceId}',${chNum},'ON')">● ON</button>
+      <button class="btn-sm btn-gray flex-1" onclick="sendCmd('${deviceId}',${chNum},'OFF')">○ OFF</button>
+      <button class="btn-sm" style="background:#f1f5f9;color:#64748b;border-radius:8px;font-size:12px;font-weight:700;padding:7px 14px;cursor:pointer;border:none;" onclick="sendCmd('${deviceId}',${chNum},'TOGGLE')">⇄ 토글</button>
+    </div>
+  </div>
+  <div class="setting-row">
+    <p class="text-[10px] font-bold text-slate-500 mb-2">⏱ 카운트다운</p>
+    <p class="text-[9px] text-slate-400 mb-2">지정 시간 후 자동으로 ON 또는 OFF 전환</p>
+    <div class="grid grid-cols-2 gap-2 mb-2">
+      <div><label class="text-[9px] text-slate-400">목표 상태</label>
+           <select id="cd-target-${chNum}" class="input-sm">
+             <option value="ON">ON으로 전환</option>
+             <option value="OFF" selected>OFF로 전환</option>
+           </select></div>
+      <div><label class="text-[9px] text-slate-400">시간 (초)</label>
+           <input id="cd-sec-${chNum}" class="input-sm" type="number" min="1" value="60"></div>
+    </div>
+    <div class="flex gap-2">
+      <button class="btn-sm btn-add flex-1" onclick="startCountdown('${deviceId}',${chNum})">카운트다운 시작</button>
+      <button class="btn-sm btn-gray" onclick="cancelCountdown('${deviceId}',${chNum})">취소</button>
+    </div>
+  </div>`;
+}
+function sendCmd(deviceId,chNum,cmd){
+  publishCmd(deviceId,`hdh/${deviceId}/ch/${chNum}/cmd`,cmd,`수동 ${cmd} CH${chNum}`);
+}
+function startCountdown(deviceId,chNum){
+  const target=document.getElementById(`cd-target-${chNum}`)?.value||'OFF';
+  const sec=parseInt(document.getElementById(`cd-sec-${chNum}`)?.value)||60;
+  if(sec<1)return;
+  client?.publish(`hdh/${deviceId}/ch/${chNum}/countdown`,`${target} ${sec}`,{qos:1});
+  log(`📤 countdown CH${chNum}: ${target} ${sec}초`,'ls');
+}
+function cancelCountdown(deviceId,chNum){
+  client?.publish(`hdh/${deviceId}/ch/${chNum}/cancel`,'1',{qos:1});
+  log(`📤 cancel CH${chNum}`,'ls');
+}
+
+// ── 스케줄 ──
+function schUI(deviceId,chNum,ch){
+  const list=ch.schedule||[];
+  return`${list.length===0?'<p class="text-xs text-slate-400 mb-3 text-center">등록된 스케줄 없음</p>':list.map(s=>`<div class="setting-row flex items-center gap-2"><span class="text-[11px] text-slate-600 flex-1">${hm(s.onH,s.onM)} → ${hm(s.offH,s.offM)} <span class="text-slate-400 text-[9px]">mask:${s.mask}</span></span><button class="btn-sm btn-del" onclick="delSch('${deviceId}',${chNum},${s.id})">삭제</button></div>`).join('')}
+  <div class="setting-row mt-2">
+    <p class="text-[10px] font-bold text-slate-500 mb-2">새 스케줄 추가</p>
+    <div class="grid grid-cols-2 gap-2 mb-2">
+      <div><label class="text-[9px] text-slate-400">켜는 시각</label><input id="so-${chNum}" class="input-sm" type="time" value="09:00"></div>
+      <div><label class="text-[9px] text-slate-400">끄는 시각</label><input id="sf-${chNum}" class="input-sm" type="time" value="18:00"></div>
+    </div>
+    <div class="mb-2"><label class="text-[9px] text-slate-400">요일 mask (127=매일)</label><input id="sm-${chNum}" class="input-sm" type="number" min="0" max="127" value="127"></div>
+    <button class="btn-sm btn-add w-full" onclick="addSch('${deviceId}',${chNum})">스케줄 추가</button>
+  </div>`;
+}
+function addSch(deviceId,chNum){
+  const p=`${document.getElementById(`so-${chNum}`).value} ${document.getElementById(`sf-${chNum}`).value} ${document.getElementById(`sm-${chNum}`).value}`;
+  client?.publish(`hdh/${deviceId}/ch/${chNum}/schedule`,p,{qos:1});
+  log(`📤 schedule CH${chNum}: ${p}`,'ls');
+  setTimeout(()=>client?.publish(`hdh/${deviceId}/get/state`,'GET',{qos:1}),400);
+  setTimeout(renderModal,550);
+}
+function delSch(deviceId,chNum,id){
+  client?.publish(`hdh/${deviceId}/ch/${chNum}/schedule/del`,String(id),{qos:1});
+  log(`📤 schedule/del CH${chNum} id=${id}`,'ls');
+  const ch=state[deviceId]?.channels[chNum];
+  if(ch?.schedule)ch.schedule=ch.schedule.filter(s=>s.id!==id);
+  renderModal();
+}
+
+// ── 순환 ──
+function cirUI(deviceId,chNum,ch){
+  const list=ch.circulate||[];
+  return`${list.length===0?'<p class="text-xs text-slate-400 mb-3 text-center">등록된 순환 없음</p>':list.map(c=>`<div class="setting-row flex items-start gap-2"><div class="flex-1"><p class="text-[11px] text-slate-700">${hm(c.startH,c.startM)} ~ ${hm(c.endH,c.endM)}</p><p class="text-[9px] text-slate-400">ON ${secLabel(c.open)} / OFF ${secLabel(c.close)} · mask:${c.mask}</p></div><button class="btn-sm btn-del" onclick="delCir('${deviceId}',${chNum},${c.id})">삭제</button></div>`).join('')}
+  <div class="setting-row mt-2">
+    <p class="text-[10px] font-bold text-slate-500 mb-2">새 순환 추가</p>
+    <div class="grid grid-cols-2 gap-2 mb-2">
+      <div><label class="text-[9px] text-slate-400">시작 시각</label><input id="cs-${chNum}" class="input-sm" type="time" value="09:00"></div>
+      <div><label class="text-[9px] text-slate-400">종료 시각</label><input id="ce-${chNum}" class="input-sm" type="time" value="18:00"></div>
+      <div><label class="text-[9px] text-slate-400">ON 시간(초)</label><input id="con-${chNum}" class="input-sm" type="number" value="60"></div>
+      <div><label class="text-[9px] text-slate-400">OFF 시간(초)</label><input id="cof-${chNum}" class="input-sm" type="number" value="1140"></div>
+    </div>
+    <div class="mb-2"><label class="text-[9px] text-slate-400">요일 mask</label><input id="cm-${chNum}" class="input-sm" type="number" min="0" max="127" value="127"></div>
+    <button class="btn-sm btn-add w-full" onclick="addCir('${deviceId}',${chNum})">순환 추가</button>
+  </div>`;
+}
+function addCir(deviceId,chNum){
+  const p=`${document.getElementById(`cs-${chNum}`).value} ${document.getElementById(`ce-${chNum}`).value} ${document.getElementById(`con-${chNum}`).value} ${document.getElementById(`cof-${chNum}`).value} ${document.getElementById(`cm-${chNum}`).value}`;
+  client?.publish(`hdh/${deviceId}/ch/${chNum}/circulate`,p,{qos:1});
+  log(`📤 circulate CH${chNum}: ${p}`,'ls');
+  setTimeout(()=>client?.publish(`hdh/${deviceId}/get/state`,'GET',{qos:1}),400);
+  setTimeout(renderModal,550);
+}
+function delCir(deviceId,chNum,id){
+  client?.publish(`hdh/${deviceId}/ch/${chNum}/circulate/del`,String(id),{qos:1});
+  log(`📤 circulate/del CH${chNum} id=${id}`,'ls');
+  const ch=state[deviceId]?.channels[chNum];
+  if(ch?.circulate)ch.circulate=ch.circulate.filter(c=>c.id!==id);
+  renderModal();
+}
+
+// ── 인칭 ──
+function inchUI(deviceId,chNum,ch){
+  const sec=Number(ch.inching)||0;
+  return`<div class="setting-row"><p class="text-[10px] text-slate-500 mb-1">ON 명령 후 자동 OFF 시간</p>
+    <p class="text-xs text-slate-700 mb-3">현재: <span class="font-bold" style="color:#8b5cf6">${sec}초</span></p>
+    <div class="flex gap-2"><input id="is-${chNum}" class="input-sm" type="number" min="1" value="${sec||5}">
+    <button class="btn-sm btn-add" onclick="setInch('${deviceId}',${chNum})">적용</button></div></div>`;
+}
+function setInch(deviceId,chNum){
+  const sec=document.getElementById(`is-${chNum}`)?.value||'5';
+  client?.publish(`hdh/${deviceId}/ch/${chNum}/inching`,sec,{qos:1});
+  log(`📤 inching CH${chNum}: ${sec}초`,'ls');
+  if(state[deviceId]?.channels[chNum])state[deviceId].channels[chNum].inching=Number(sec);
+  renderModal();
+}
+</script>
+<!-- ════ Firebase Realtime Database — 조작 로그 전담 ════
+     type="module" 로 로드. 완료 후 window.fbLog / window.fbGetLogs 노출.
+     Firebase 로드 실패 시에도 MQTT 제어는 정상 동작 (옵셔널 체이닝 사용). -->
+<script type="module">
+import { initializeApp }                          from "https://www.gstatic.com/firebasejs/12.14.0/firebase-app.js";
+import { getDatabase, ref, push, get,
+         query, limitToLast, orderByKey }         from "https://www.gstatic.com/firebasejs/12.14.0/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey:            "AIzaSyC_n0_hPc26EGAXR__RugQLOkpc12paFUw",
+  authDomain:        "hdh-smart-farm.firebaseapp.com",
+  databaseURL:       "https://hdh-smart-farm-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId:         "hdh-smart-farm",
+  storageBucket:     "hdh-smart-farm.firebasestorage.app",
+  messagingSenderId: "535447055597",
+  appId:             "1:535447055597:web:2ad6399e26a6efae2b30e4",
+  measurementId:     "G-E9ZFE435G4"
+};
+
+const app = initializeApp(firebaseConfig);
+const db  = getDatabase(app);
+
+// ── 로그 기록 ─────────────────────────────────────────────────────
+// window._auditUser / _auditIp / _auditAgent 는 일반 스크립트에서 설정됨
+window.fbLog = async function(deviceId, cmdDesc) {
+  try {
+    await push(ref(db, `logs/${deviceId}`), {
+      t:   new Date().toLocaleString('ko', {hour12:false}),
+      u:   window._auditUser  || '?',
+      ip:  window._auditIp    || 'unknown',
+      dv:  window._auditAgent || 'unknown',
+      cmd: String(cmdDesc).slice(0, 60)
+    });
+  } catch(e) { console.warn('[Firebase] log 실패:', e.message); }
+};
+
+// ── 최근 50건 조회 ────────────────────────────────────────────────
+window.fbGetLogs = async function(deviceId) {
+  try {
+    const snap = await get(
+      query(ref(db, `logs/${deviceId}`), orderByKey(), limitToLast(50))
+    );
+    const rows = [];
+    snap.forEach(child => rows.push(child.val()));
+    return rows.reverse();          // 최신순
+  } catch(e) {
+    console.warn('[Firebase] 조회 실패:', e.message);
+    return null;                    // null = 연결 실패
+  }
+};
+
+console.log('[Firebase] 초기화 완료 — logs/', firebaseConfig.projectId);
+</script>
+</body>
+</html>
